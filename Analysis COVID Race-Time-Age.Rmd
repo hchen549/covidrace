@@ -1,0 +1,317 @@
+---
+title: "Differences in racial burdens of COVID deaths"
+author: "Adeline Lo and Héctor Pifarré i Arolas"
+date: "This version: April 2021"
+output: 
+  html_document: 
+    code_folding: hide
+    pandoc_args: ["--lua-filter=color-text.lua"]
+    toc: true
+    toc_float: true
+    number_sections: true
+    theme: united
+  pdf_document: 
+    pandoc_args: ["--lua-filter=color-text.lua"]
+    keep_tex: true
+header-includes:
+  - \preauthor{\centering\large}
+  - \predate{\centering\normalsize}
+  - \pretitle{\centering\Large\textbf}
+  - \usepackage{setspace}\onehalfspacing
+  - \usepackage{xcolor}
+  - \usepackage[shortlabels]{enumitem}
+  - \usepackage{pgf,tikz, mathabx}
+  - \usetikzlibrary{positioning}
+editor_options:
+  chunk_output_type: console
+---
+<style>
+
+table, td, th {
+  border: none;
+  padding-left: 1em;
+  padding-right: 1em;
+  margin-left: auto;
+  margin-right: auto;
+  margin-top: 1em;
+  margin-bottom: 1em;
+}
+
+</style>
+
+```{cat, engine.opts = list(file = "color-text.lua")}
+Span = function(span)
+  color = span.attributes['color']
+  -- if no color attribute, return unchange
+  if color == nil then return span end
+  
+  -- tranform to <span style="color: red;"></span>
+  if FORMAT:match 'html' then
+    -- remove color attributes
+    span.attributes['color'] = nil
+    -- use style attribute instead
+    span.attributes['style'] = 'color: ' .. color .. ';'
+    -- return full span element
+    return span
+  elseif FORMAT:match 'latex' then
+    -- remove color attributes
+    span.attributes['color'] = nil
+    -- encapsulate in latex code
+    table.insert(
+      span.content, 1,
+      pandoc.RawInline('latex', '\\textcolor{'..color..'}{')
+    )
+    table.insert(
+      span.content,
+      pandoc.RawInline('latex', '}')
+    )
+    -- returns only span content
+    return span.content
+  else
+    -- for other format return unchanged
+    return span
+  end
+end
+```
+
+```{r libraries, echo=FALSE, message=FALSE, warning=FALSE}
+# rm(list=ls())
+library(forcats)
+library(devtools)
+library(cspp)
+library(data.table)
+library(rapportools)
+library(tidyverse)
+library(lubridate)
+#library(plyr)
+library('tidyr')
+library(ggplot2)
+library(gridExtra)
+library(ggpubr)
+library(hrbrthemes)
+library(viridis)
+#library(xlsx)
+library(glue)
+library(dplyr)
+library(openxlsx)
+library(lubridate)
+library(anytime)
+```
+
+# COVID-Deaths by Race, Age, Time
+
+Access CDC *AH Monthly provisional counts of deaths by age group and race/ethnicity for select causes of death* (https://data.cdc.gov/NCHS/AH-Monthly-provisional-counts-of-deaths-by-age-gro/r5pw-bk5t) 
+
+* Only U.S. aggregated
+* Can't find dataset on CDC that is broken down by all of the following: State/Time/Race/Age 
+
+
+```{r call-in-data}
+covidraceage<-read.csv("data/AH_Monthly_provisional_counts_of_deaths_by_age_group_and_race_ethnicity_for_select_causes_of_death.csv",stringsAsFactors = FALSE)
+
+#table(covidraceage$Age.Group)10 age groups. 
+
+
+#rename some variables for ease:
+covidraceage<-covidraceage %>% 
+  dplyr::select(-starts_with("flag_")) %>%
+  dplyr::rename(
+    StartDate = Start.Date,
+    EndDate = End.Date,
+    Race = Race.and.Hispanic.Origin.Group,
+    Age = Age.Group,
+    COVID_MultCauseDeath = COVID.19..Multiple.Cause.of.Death.,
+    COVID_CauseDeath = COVID.19..Underlying.Cause.of.Death.
+    )
+
+covidraceage$StartDate<-mdy(covidraceage$StartDate)
+covidraceage$EndDate<-mdy(covidraceage$EndDate)
+
+covidraceage %>%
+  as_tibble()
+
+
+# Careful with this definition of covid deaths! Let's just use covid deaths without multicause death, as it is the common definition
+
+#covidraceage$COVID_PartofDeath<-covidraceage$COVID_CauseDeath+covidraceage$COVID_MultCauseDeath
+covidraceage$COVID_PartofDeath<-covidraceage$COVID_CauseDeath
+
+#sum for each race/age/month/year the covid deaths
+
+age_ranges<-c("0-4 years","5-14 years","15-24 years","25-34 years","35-44 years","45-54 years","55-64 years","65-74 years"
+            ,"75-84 years","85 years and over")
+races<-unique(covidraceage$Race)
+DF<-vector("list",length=length(races))
+#we want to end up with list of race dataframes, each race dataframe is 10 age grows rows, columns are Month-Year, elements are covid deaths.
+
+# informationholder for time: matches 2020-01 --> 2021-02 14 months --> 1-14
+# sum(covidraceage$COVID_CauseDeath)
+
+covidraceage_new <- covidraceage %>% 
+  filter(Year == "2020" |Year == "2021")
+
+covidraceage_new$Month[covidraceage_new$Year == "2021" & covidraceage_new$Month == "1"] <- 13
+covidraceage_new$Month[covidraceage_new$Year == "2021" & covidraceage_new$Month == "2"] <- 14
+
+covidraceage_white <- covidraceage_new %>%
+  filter(Race == "Non-Hispanic White") %>%
+  dplyr::select(Age,Year,Month,COVID_PartofDeath) 
+
+covidraceage_black <- covidraceage_new %>%
+  filter(Race == "Non-Hispanic Black") %>%
+  dplyr::select(Age,Year,Month,COVID_PartofDeath)
+
+covidraceage_hispanic <- covidraceage_new %>%
+  filter(Race == "Hispanic") %>%
+  dplyr::select(Age,Year,Month,COVID_PartofDeath)
+
+covidraceage_asian <- covidraceage_new %>%
+  filter(Race == "Non-Hispanic Asian") %>%
+  dplyr::select(Age,Year,Month,COVID_PartofDeath)
+
+saveRDS(covidraceage_white,file="../Data/covidraceage_white_unweighted.rds")
+saveRDS(covidraceage_black,file="../Data/covidraceage_black_unweighted.rds")
+saveRDS(covidraceage_hispanic,file="../Data/covidraceage_hispanic_unweighted.rds")
+saveRDS(covidraceage_asian,file="../Data/covidraceage_asian_unweighted.rds")
+#table(covidraceage$Race) "Hispanic","Non-Hispanic Asian","Non-Hispanic Black","Non-Hispanic White" (leave out: "Other"  "Non-Hispanic American Indian or Alaska Native")
+
+
+
+## Finish creation of 4 dataframes (one for each race), each dataframe is 10 x 14 (age groups x months from 2020-01 -> 2021-02), each cell is COVID_PartofDeath count.
+```
+
+
+# Get standard populations for U.S. 
+* from https://seer.cancer.gov/stdpopulations/stdpop.singleages.html and clean it.
+
+```{r get-usstdpop, eval=F}
+library(htmltab)
+url <- "https://seer.cancer.gov/stdpopulations/stdpop.singleages.html"
+usstdpop <- htmltab(doc = url)
+usstdpop %>%
+  as_tibble()
+# saveRDS(usstdpop,file="../Data/StdPop/usstdpop.rds")
+```
+
+```{r clean-usstdpop-popagerace, echo=FALSE, message=FALSE, warning=FALSE}
+# usstdpop<-readRDS(file="../Data/StdPop/usstdpop.rds")
+
+
+#use first two cols, `Age` & `2000 U.S. Standard Population (Census P25-1130) >> Single Ages to 99`
+
+usstdpop$USStdPop99<-as.numeric(gsub(pattern=",",replacement="",x=usstdpop$`2000 U.S. Standard Population (Census P25-1130) >> Single Ages to 99`) ) #std pop variable for each year-increment of age
+usstdpop$Age_no<-gsub(pattern=" years",replacement="",x=usstdpop$Age)
+
+StdPop<-data.frame(Age=usstdpop$Age_no[which(usstdpop$Age_no!="Total")]
+           ,stdpop=usstdpop$USStdPop99[which(usstdpop$Age_no!="Total")])
+StdPop$Age[which(StdPop$Age=="100+")]<-100
+StdPop$Age<-as.numeric(StdPop$Age)
+saveRDS(StdPop,file="../Data/StdPop/StdPop.rds")
+#sum up by age categories that the CDC has using #table(covidraceage$Age.Group)
+
+Group_AgeStdPop<-data.frame(Age=c("0-4 years","5-14 years","15-24 years","25-34 years","35-44 years","45-54 years","55-64 years","65-74 years"
+            ,"75-84 years","85 years and over"),
+Grouped_StdPop=c(sum(StdPop$stdpop[StdPop$Age<=4]),sum(StdPop$stdpop[StdPop$Age>4&StdPop$Age<=14])
+                 ,sum(StdPop$stdpop[StdPop$Age>14&StdPop$Age<=24]),sum(StdPop$stdpop[StdPop$Age>24&StdPop$Age<=34])
+                 ,sum(StdPop$stdpop[StdPop$Age>34&StdPop$Age<=44]),sum(StdPop$stdpop[StdPop$Age>44&StdPop$Age<=54])
+                 ,sum(StdPop$stdpop[StdPop$Age>54&StdPop$Age<=64]),sum(StdPop$stdpop[StdPop$Age>64&StdPop$Age<=74])
+                 ,sum(StdPop$stdpop[StdPop$Age>74&StdPop$Age<=84]),sum(StdPop$stdpop[StdPop$Age>84]))
+)
+Group_AgeStdPop$AgeStdPop_Weight<-Group_AgeStdPop$Grouped_StdPop/sum(Group_AgeStdPop$Grouped_StdPop) #weight sums to 1
+
+popraceage<-read.csv("pnas_alternative/pop-age-race_frompnas.csv")
+
+Group_AgeStdPop$Hispanic_pop_age<-popraceage$Hispanic
+Group_AgeStdPop$White_pop_age<-popraceage$non.Hispanic.White
+Group_AgeStdPop$Black_pop_age<-popraceage$non.Hispanic.Black
+```
+
+$$R_{g,t} = \sum_i  (r_{i,t,g} \times w_i)$$
+
+where 
+
+$$r_{i,t,g} = \frac{\text{COVID deaths in this age group}_{t,g}}{\text{Population in this age group}_{g}}$$
+and 
+$$w_i = \frac{\text{Population}_i}{\sum_i \text{Population}_i}$$
+
+We're going to calculate $R_{g,t}$ for race groups $g$ Hispanic, Non-Hispanic White, and Black (since we have age range population for these three groups but not Asian). `AgeStdPop_weight` in the above is equivalent to $w_i$. For $r_{i,t,g}$ we get these from the covid counts for each race group $g$, age group $i$, time $t$, then divide by the population in the age group $i$ for the race group $g$. This latter part is from the pnas file `pnas.2014746118.sd01 (1)` sheet 10, "Population Counts", used in the article https://www.pnas.org/content/118/5/e2014746118. We've pulled the first table of population counts by race into a separate csv file for ease of import, called `pop-age-race_frompnas.csv`, and with the 5to9 and 10to14 age groups summed up so they match our CDC covid-death counts data age groups perfectly. Covid death counts for $i$ for race $g$ divided by `Population in this age group_{g}` and multiplied by 100,000 is $r_{i,t,g}$ in the above (called `Group_AgeStdPop$Race_pop_age` for the appropriate `Race` -- Hispanic, White, Black).
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+covidraceage_white <- readRDS(file = "../Data/covidraceage_white_unweighted.rds")
+covidraceage_black<- readRDS(file = "../Data/covidraceage_black_unweighted.rds")
+covidraceage_hispanic<- readRDS(file = "../Data/covidraceage_hispanic_unweighted.rds")
+covidraceage_asian<- readRDS(file = "../Data/covidraceage_asian_unweighted.rds")
+
+covidwhite_weighted <- right_join(covidraceage_white,Group_AgeStdPop) %>%
+  mutate(riwi_white = (COVID_PartofDeath/White_pop_age)*100000*AgeStdPop_Weight)%>% #this is r_i x w_i
+  dplyr::select(-Grouped_StdPop,-AgeStdPop_Weight) %>%
+  rename(COVID_PartofDeath_white = COVID_PartofDeath)
+
+covidblack_weighted <- right_join(covidraceage_black,Group_AgeStdPop) %>%
+  mutate(riwi_black = (COVID_PartofDeath/Black_pop_age)*100000*AgeStdPop_Weight)%>% #this is r_i x w_i
+  dplyr::select(-Grouped_StdPop,-AgeStdPop_Weight) %>%
+  rename(COVID_PartofDeath_black = COVID_PartofDeath)
+
+covidhispanic_weighted <- right_join(covidraceage_hispanic,Group_AgeStdPop) %>%
+  mutate(riwi_hispanic = (COVID_PartofDeath/Hispanic_pop_age)*100000*AgeStdPop_Weight)%>% #this is r_i x w_i
+  dplyr::select(-Grouped_StdPop,-AgeStdPop_Weight) %>%
+  rename(COVID_PartofDeath_hispanic = COVID_PartofDeath)
+  
+
+covid_race_weighted <- list(covidwhite_weighted, covidblack_weighted, covidhispanic_weighted) %>% reduce(right_join, by = c("Age","Year","Month"))
+
+covid_race_weighted2 <- covid_race_weighted %>%
+  #group_by(Age,Year,Month) %>%
+  group_by(Year,Month) %>%
+  dplyr::summarise(White = sum(riwi_white),
+            Black = sum(riwi_black),
+            Hispanic = sum(riwi_hispanic)) %>%
+  pivot_longer(c(White,Black,Hispanic),
+               names_to = "Race",
+               values_to = "COVID",
+  )
+
+ggplot(data = covid_race_weighted2) + 
+  geom_line (aes(x = Month, y = COVID, colour = Race), size=1.25) +
+  scale_x_continuous(breaks = 1:14) + theme_bw() +  scale_color_viridis(option="D",alpha=1,discrete=TRUE) +
+  ylab("COVID Death Rate per 100,000 (Age Standardized)") + xlab("Months from January 2020")
+
+#Figures/us_race_time_coviddeathrate.pdf
+
+# Adding overall deaths, simply sum the counts for all the races
+# Reading in overall file
+# covidraceage_new earlier
+# Summary by month
+counts_summary<-covidraceage_new %>%
+             group_by(Year,Month) %>%   
+  #simple counts by race and week
+  summarize(Death_counts=COVID_PartofDeath)
+# Replacing NAs with 0s
+counts_summary[is.na(counts_summary)] <- 0
+
+# Counts data frame for overall
+counts_overall<-data.frame(Year=c(rep(2020,12),rep(2021,2)),
+                           Month=seq(1:14))
+# US population data
+total_us<-328239523
+# Now summing up across races
+for (i in 1:length(unique(counts_overall$Month))){
+  for (j in 2020:2021){
+  counts_overall$Death_counts[which(counts_overall$Month==i&counts_overall$Year==j)]<-
+    sum(counts_summary$Death_counts[which(counts_summary$Month==i&counts_summary$Year==j)])
+  }                                                                                                                        
+}
+# Checking totals  
+#sum(counts_overall$Death_counts)
+# Plots of overall death counts
+ggplot(counts_overall)+
+  geom_line(aes(x= Month,y = Death_counts), color = "black", size=1.25)+
+  scale_x_continuous(breaks = 1:14) + theme_bw() +  scale_color_viridis(option="D",alpha=1,discrete=TRUE) +
+  ylab("COVID Death Counts") + xlab("Months from January 2020")
+
+
+
+
+```
+
+

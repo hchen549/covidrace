@@ -1,0 +1,327 @@
+---
+title: "Untitled"
+author: "JIAYI HONG"
+date: "5/28/2021"
+output: pdf_document
+---
+
+
+```{r libraries, echo=FWISE, message=FWISE, warning=FWISE}
+rm(list=ls())
+library(forcats)
+library(devtools)
+library(cspp)
+library(data.table)
+library(rapportools)
+#library(tidyverse)
+library(lubridate)
+library(plyr)
+library('tidyr')
+library(ggplot2)
+library(gridExtra)
+library(ggpubr)
+library(hrbrthemes)
+library(viridis)
+#library(xlsx)
+library(glue)
+library(dplyr)
+library(openxlsx)
+library(lubridate)
+library(anytime)
+```
+
+```{r}
+population_WI = read.delim("data/Single-Race Population Estimates 2010-2019 by State and Single-Year Age (21).txt", header = T, sep = "\t")
+
+
+population_WI = population_WI %>%
+  filter(States == "Wisconsin")
+population_WI
+unique(population_WI$Five.Year.Age.Groups)
+unique(population_WI$Race)
+unique(population_WI$Ethnicity)
+```
+
+```{r}
+population_WI_new = population_WI
+
+# combine age groups, and the new age group names are exactly the same as those of the death_?? data below
+population_WI_new$Five.Year.Age.Groups[which(population_WI_new$Five.Year.Age.Groups == "< 1 year")] = "0-14 Years"
+population_WI_new$Five.Year.Age.Groups[which(population_WI_new$Five.Year.Age.Groups == "1-4 years")] = "0-14 Years"
+population_WI_new$Five.Year.Age.Groups[which(population_WI_new$Five.Year.Age.Groups == "5-9 years")] = "0-14 Years"
+population_WI_new$Five.Year.Age.Groups[which(population_WI_new$Five.Year.Age.Groups == "10-14 years")] = "0-14 Years"
+population_WI_new$Five.Year.Age.Groups[which(population_WI_new$Five.Year.Age.Groups == "15-19 years")] = "15-29 Years"
+population_WI_new$Five.Year.Age.Groups[which(population_WI_new$Five.Year.Age.Groups == "20-24 years")] = "15-29 Years"
+population_WI_new$Five.Year.Age.Groups[which(population_WI_new$Five.Year.Age.Groups == "25-29 years")] = "15-29 Years"
+population_WI_new$Five.Year.Age.Groups[which(population_WI_new$Five.Year.Age.Groups == "30-34 years")] = "30-49 Years"
+population_WI_new$Five.Year.Age.Groups[which(population_WI_new$Five.Year.Age.Groups == "35-39 years")] = "30-49 Years"
+population_WI_new$Five.Year.Age.Groups[which(population_WI_new$Five.Year.Age.Groups == "40-44 years")] = "30-49 Years"
+population_WI_new$Five.Year.Age.Groups[which(population_WI_new$Five.Year.Age.Groups == "45-49 years")] = "30-49 Years"
+population_WI_new$Five.Year.Age.Groups[which(population_WI_new$Five.Year.Age.Groups == "50-54 years")] = "50-64 Years" 
+population_WI_new$Five.Year.Age.Groups[which(population_WI_new$Five.Year.Age.Groups == "55-59 years")] = "50-64 Years" 
+population_WI_new$Five.Year.Age.Groups[which(population_WI_new$Five.Year.Age.Groups == "60-64 years ")] = "50-64 Years" 
+population_WI_new$Five.Year.Age.Groups[which(population_WI_new$Five.Year.Age.Groups == "65-69 years")] = "65+"
+population_WI_new$Five.Year.Age.Groups[which(population_WI_new$Five.Year.Age.Groups == "70-74 years")] = "65+"
+population_WI_new$Five.Year.Age.Groups[which(population_WI_new$Five.Year.Age.Groups == "75-79 years")] = "65+"
+population_WI_new$Five.Year.Age.Groups[which(population_WI_new$Five.Year.Age.Groups == "80-84 years")] = "65+"
+population_WI_new$Five.Year.Age.Groups[which(population_WI_new$Five.Year.Age.Groups == "85+ years")] = "65+"
+
+colnames(population_WI_new)[4] = "age_groups" # Five.Year.Age.Groups => age_groups
+#colnames(population_WI_new)
+
+population_WI_new
+```
+
+```{r}
+# age groups for all races (>3)
+population_WI_all_races_sum = population_WI_new %>%
+  group_by(age_groups) %>%
+  dplyr::summarise(population = sum(Population))
+
+population_WI_all_races_sum
+
+# create racial groups and summarise by age
+population_WI_white_sum = population_WI_new %>%
+  filter(Race == "White" & Ethnicity == "Not Hispanic or Latino") %>%
+  select(age_groups, Population) %>%
+  group_by(age_groups) %>%
+  dplyr::summarise(population = sum(Population))
+
+population_WI_black_sum = population_WI_new %>%
+  filter(Race == "Black or African American" & Ethnicity == "Not Hispanic or Latino") %>%
+  select(age_groups, Population) %>%
+  group_by(age_groups) %>%
+  dplyr::summarise(population = sum(Population))
+
+population_WI_hispanic_sum = population_WI_new %>%
+  filter(Ethnicity == "Hispanic or Latino") %>%
+  select(age_groups, Population) %>%
+  group_by(age_groups) %>%
+  dplyr::summarise(population = sum(Population))
+```
+
+
+```{r}
+# overall death data
+death = read.csv("data/AH_Quarterly_Excess_Deaths_by_State__Sex__Age__and_Race.csv")
+table(death$AgeGroup)
+death
+```
+
+
+
+```{r}
+# adjust age groups
+death$AgeGroup[which(death$AgeGroup == "50-54 Years")] = "50-64 Years" 
+death$AgeGroup[which(death$AgeGroup == "50-64 Years")] = "50-64 Years" 
+
+table(death$AgeGroup)
+```
+
+
+
+```{r}
+death_new = death %>%
+  filter(Year == "2020" |Year == "2021")
+death_new$Quarter[death_new$YearQuarter == "2021, Quarter 1"] = "Quarter 5"
+death_new$Quarter[death_new$YearQuarter == "2021, Quarter 2"] = "Quarter 6"
+
+# by state
+death_WI = death_new %>%
+  filter(State == "WI" & AgeGroup != "all Ages" & AgeGroup != "Not stated")
+  
+# death in 3 racial groups, combined version
+death_WI_3races_sum = death_WI %>%
+  filter(RaceEthnicity == "Non-Hispanic White" | RaceEthnicity == "Non-Hispanic Black" | RaceEthnicity == "Hispanic") %>%
+  group_by(AgeGroup, Quarter, RaceEthnicity) %>%
+  dplyr::summarise(Deaths_weighted = sum(Deaths..weighted.))
+death_WI_3races_sum
+```
+
+```{r, include=FalSE}
+# death in racial groups, separated version
+death_WI_white_sum = death_WI %>%
+  filter(RaceEthnicity == "Non-Hispanic White") %>%
+  select(AgeGroup,Quarter,Deaths..weighted.) %>%
+  group_by(AgeGroup, Quarter) %>%
+  dplyr::summarise(Deaths_weighted = sum(Deaths..weighted.))
+
+death_WI_black_sum = death_WI %>%
+  filter(RaceEthnicity == "Non-Hispanic Black") %>%
+  dplyr::select(AgeGroup,Quarter,Deaths..weighted.) %>%
+  group_by(AgeGroup, Quarter) %>%
+  dplyr::summarise(Deaths_weighted = sum(Deaths..weighted.))
+
+death_WI_hispanic_sum = death_WI %>%
+  filter(RaceEthnicity == "Hispanic") %>%
+  dplyr::select(AgeGroup,Quarter,Deaths..weighted.) %>%
+  group_by(AgeGroup, Quarter) %>%
+  dplyr::summarise(Deaths_weighted = sum(Deaths..weighted.))
+
+death_WI_black_sum
+
+# death_asian = death_new %>%
+#   filter(RaceEthnicity == "Non-Hispanic Asian") %>%
+#   dplyr::select(AgeGroup,Year,Quarter,Deaths..weighted.)
+```
+
+$$
+R_{g,t} = \sum_i  (r_{i,t,g} \times w_i)
+$$
+
+where 
+
+$$r_{i,t,g} = \cfrac{\text{COVID deaths in this age group}_{t,g}}{\text{Population in this age group}_{g}}$$
+and 
+$$w_i = \cfrac{\text{Population}_i}{\sum_i \text{Population}_i}$$
+
+We're going to cWIculate $$R_{g,t}$$ for race groups $$g$$ Hispanic, Non-Hispanic White, and Black (since we have age range population for these three groups but not Asian). 
+
+
+`AgeStdPop_weight` in the above is equivWIent to $w_i$. 
+
+
+For $r_{i,t,g}$ we get these from the covid counts for each race group $g$, age group $i$, time $t$, then divide by the population in the age group $i$ for the race group $g$. This latter part is from the pnas file `pnas.2014746118.sd01 (1)` sheet 10, "Population Counts", used in the article https://www.pnas.org/content/118/5/e2014746118. We've pulled the first table of population counts by race into a separate csv file for ease of import, called `pop-age-race_frompnas.csv`, and with the 5to9 and 10to14 age groups summed up so they match our CDC covid-death counts data age groups perfectly. Covid death counts for $i$ for race $g$ divided by `Population in this age group_{g}` and multiplied by 100,000 is $r_{i,t,g}$ in the above (called `Group_AgeStdPop$Race_pop_age` for the appropriate `Race` -- Hispanic, White, Black).
+
+```{r}
+
+population_WI_all_races_sum
+
+
+
+population_WI_all_races_sum # total population, including all races
+population_WI_white_sum
+population_WI_black_sum
+population_WI_hispanic_sum
+```
+
+```{r}
+population_WI_new
+population_WI_total = sum(population_WI_new$Population)
+
+# population_WI_total = sum(population_WI_black_sum$population)+sum(population_WI_white_sum$population)+sum(population_WI_hispanic_sum$population)
+
+#population_WI_total
+```
+
+$$
+w_i = \cfrac{\text{Population}_i}{\sum_i \text{Population}_i}
+$$
+
+```{r}
+w_1 = population_WI_all_races_sum$population[1]/ population_WI_total
+w_2 = population_WI_all_races_sum$population[2] / population_WI_total
+w_3 = population_WI_all_races_sum$population[3]	 / population_WI_total
+w_4 = population_WI_all_races_sum$population[4] / population_WI_total
+w_5 = population_WI_all_races_sum$population[5] / population_WI_total
+
+w_i = c(w_1, w_2, w_3, w_4, w_5)
+age_ranges = c("0-14 Years","15-29 Years","30-49 Years","50-64 Years","65+")
+names(w_i) = age_ranges
+w_i
+```
+
+
+
+```{r}
+death_WI_3races_sum
+# death_WI_white_sum
+# death_WI_black_sum
+# death_WI_hispanic_sum
+```
+
+$$
+r_{i,t,g} = \cfrac{\text{COVID deaths in this age group}_{t,g}}{\text{Population in this age group}_{g}}
+$$
+
+```{r}
+# look for population with specific age and race
+
+########## change this function for different states
+
+r_igt_lower_func = function(age, race) {
+  if (race == "Non-Hispanic White") {df = population_WI_white_sum}
+  if (race == "Hispanic") {df = population_WI_hispanic_sum}
+  if (race == "Non-Hispanic Black") {df = population_WI_black_sum}
+  
+  if (age == "0-14 Years") {lower = df$population[1]}
+  if (age == "15-29 Years") {lower = df$population[2]}
+  if (age == "30-49 Years") {lower = df$population[3]}
+  if (age == "50-64 Years") {lower = df$population[4]}
+  if (age == "65+") {lower = df$population[5]}
+  
+  return(lower)
+}
+```
+
+```{r}
+death_WI_3races_sum_rigt = death_WI_3races_sum %>%
+  mutate(r_igt = 0)
+
+for (i in c(1:nrow(death_WI_3races_sum_rigt))) {
+  row_i = death_WI_3races_sum_rigt[i,]
+  age = row_i[1] # AgeGroup, i
+  race = row_i[3] # RaceEthnicity, g
+  upper = row_i[4] # Deaths_weighted
+  lower = r_igt_lower_func(age = age, race = race)
+  r_igt_i = as.numeric(upper) / lower
+  death_WI_3races_sum_rigt$r_igt[i] = r_igt_i
+}
+
+death_WI_3races_sum_rigt  # row 76-90 are all ages 
+```
+
+$$
+R_{g,t} = \sum_i  (r_{i,t,g} \times w_i)
+$$
+
+```{r}
+R_gt_func = function(race, quarter){
+  df = death_WI_3races_sum_rigt %>%
+    filter(RaceEthnicity == race & Quarter == quarter)  # determine race & quarter
+  sum_i = 0 # prepare for add up
+  
+  for (i in age_ranges) { # 5 age groups in total 
+                          # age_ranges are characters, in the same form as those of death_??, and WIso index of w_i
+    df_idx = which(df$AgeGroup == i) # just in case the order is different 
+    
+    if (length(df_idx) > 0){ # it is possible that our subset has severWI age groups missing, then df_idx = integer(0)
+    aaa = df$r_igt[df_idx] * w_i[i]} # $(r_{i,t,g} \times w_i)$
+    else {aaa = 0}
+    
+    sum_i = sum_i + aaa
+  }
+  
+  ans = sum_i
+  return(ans)
+}
+```
+
+```{r}
+length(unique(death_WI$Quarter))
+unique(death_WI$Quarter)
+
+R_gt = data.frame(racial_group = rep(c("Non-Hispanic White", "Non-Hispanic Black", "Hispanic"), each = 5), time = rep(c("Quarter 1", "Quarter 2", "Quarter 3", "Quarter 4", "Quarter 5"), 3))
+
+R_gt = R_gt %>%
+  mutate(R_gt_ = 0)
+
+for (i in c(1:nrow(R_gt))) {
+  race = R_gt$racial_group[i]
+  quarter = R_gt$time[i]
+  
+  rrgti = R_gt_func(race = race, quarter = quarter)
+  R_gt$R_gt_[i] = rrgti
+}
+
+R_gt
+```
+
+
+```{r}
+ggplot(R_gt, aes(x = time, y = R_gt_))+
+  geom_point()+
+  facet_wrap(~ racial_group)+
+  labs(x = NULL)+
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
+```

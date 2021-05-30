@@ -6,9 +6,15 @@ output: html_document
 ```{r}
 library(tidyverse)
 library(tidytext)
+library(rvest)
 ```
 
 ```{r}
-read_csv("https://www.dropbox.com/home/COVID19-policies/Data/CDC-deathsbyrace?preview=AH_Quarterly_Excess_Deaths_by_State__Sex__Age__and_Race.csv")
+
+excess_death = read_csv("data/AH_Quarterly_Excess_Deaths_by_State__Sex__Age__and_Race.csv")
+excess_death
+
+read_csv("data/Single-Race Population Estimates 2010-2019 by State and Single-Year Age (21).txt")
+
 ```
 

@@ -15,14 +15,14 @@ getwd()
 
 ```{r readfile}
 library(tidyverse)
-cdc_pop = read.delim(file="/Users/liangsiyu/Adeline Research Dropbox/Liang Siyu/COVID19-policies/Data/cdc_pop_counts_race_state_age/Single-Race Population Estimates 2010-2019 by State and Single-Year Age (21).txt")       
+cdc_pop = read.delim("data/Single-Race Population Estimates 2010-2019 by State and Single-Year Age (21).txt") 
 
  
-excess_death <- read.csv("/Users/liangsiyu/Adeline Research Dropbox/Liang Siyu/COVID19-policies/Data/CDC-deathsbyrace/AH_Quarterly_Excess_Deaths_by_State__Sex__Age__and_Race.csv") 
+excess_death <- read.csv("data/AH_Quarterly_Excess_Deaths_by_State__Sex__Age__and_Race.csv") 
 
 cdc_pop_new <- cdc_pop %>%
   select(States,Five.Year.Age.Groups.Code,Ethnicity,Race,Population) %>%
-  rename(Age = Five.Year.Age.Groups.Code) %>%
+  dplyr::rename(Age = Five.Year.Age.Groups.Code) %>%
   filter(Ethnicity == "Not Hispanic or Latino" & Race == "Black or African American" |
          Ethnicity == "Not Hispanic or Latino" & Race == "White" | 
         Ethnicity == "Hispanic or Latino" )%>%
@@ -36,7 +36,7 @@ cdc_pop_new <- cdc_pop %>%
   group_by(States, Age, Ethnicity,Race) %>% summarise(sumpop = sum(Population))
 
 excess_death_new <- excess_death %>%
-  rename(Age = AgeGroup,
+  dplyr::rename(Age = AgeGroup,
          Race = RaceEthnicity,
          States = StateName) %>%
   filter(Age == "0-14 Years" | Age == "15-29 Years" | Age == "30-49 Years" | Age == "50-64 Years" | Age == "65+",
@@ -48,6 +48,7 @@ excess_death_new <- excess_death %>%
 ``` 
 
 ```{r}
+excess_death_new
 Wisconsin_excessdeath <- excess_death_new  %>%
   filter(States == "Wisconsin")  %>%
   select(States,Race,Age,Year,Quarter,COVID19..weighted.) 
@@ -58,6 +59,12 @@ Wisconsin_excessdeath$Race[Wisconsin_excessdeath$Race ==  "Non-Hispanic Black"] 
 
 Wisconisin_pop <- cdc_pop_new %>%
   filter(States == "Wisconsin")
+
+
+
+Wisconsin_excessdeath %>%
+  arrange(Race, Age)
+
 
 Wisconisin_pop$Ethnicity <- as.character(Wisconisin_pop$Ethnicity)
 Wisconisin_pop$Race <- as.character(Wisconisin_pop$Race)

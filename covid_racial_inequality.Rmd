@@ -1,14 +1,118 @@
 ---
 title: "covid_racial_inequality"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
 
 ```{r}
+rm(list=ls())
 library(tidyverse)
+library(tidytext)
+library(naniar)
+
 ```
 
 ```{r}
-read_csv("./data/AH_Quarterly_Excess_Deaths_by_State__Sex__Age__and_Race.csv")
-read_csv("./data/Single-Race Population Estimates 2010-2019 by State and Single-Year Age (21).txt")
+# All constant variable
+targetRaceEthnicity = c("Non-Hispanic Black", "Non-Hispanic White")
+```
+
+```{r}
+excess_death = read_csv("data/AH_Quarterly_Excess_Deaths_by_State__Sex__Age__and_Race.csv")
+
+
+# Data cleaning
+excess_death = excess_death %>%
+  dplyr::filter(RaceEthnicity %in% c("Hispanic", "Non-Hispanic Black", "Non-Hispanic White")) %>%
+  dplyr::filter(str_detect(AgeGroup, "Years") | AgeGroup %in% c("65+"))  %>%
+  mutate(AgeGroup = case_when(
+    AgeGroup == "50-54 Years" ~ "50-64 Years",
+    TRUE ~ AgeGroup
+  )) 
+
+
+
+# Narrow down to specific state and time interval  
+death_race_age_quarter = excess_death %>%
+  filter(Year %in% c(2020, 2021) & State == "WI" & Sex == "All Sexes") %>%
+  group_by(RaceEthnicity, AgeGroup, YearQuarter) %>%
+  summarise(covidDeath = sum(`COVID19 (weighted)`)) %>%
+  replace_na(list(covidDeath = 0))
+
+death_race_age_quarter
+  
+```
+
+
+```{r}
+cdc_pop = read.delim("data/Single-Race Population Estimates 2010-2019 by State and Single-Year Age (21).txt") 
+
+
+cdc_pop = cdc_pop %>%
+  # Replace the ""  with NA
+  replace_with_na(replace = list(Ethnicity = "",
+                                 Race = "")) %>%
+  # Filter the NA value in Ethnicity and Race column 
+  filter(!is.na(Ethnicity)) %>%
+  filter(!is.na(Race))
+
+
+cdc_pop = cdc_pop %>%
+  dplyr::rename(ageGroup = Five.Year.Age.Groups) %>%
+  # Reclassify the Race group
+  mutate(Race = case_when(
+    Race == "Black or African American" ~ "Black",
+    TRUE ~ Race
+  )) %>%
+  # Reclassify the Ethnicity group
+  mutate(Ethnicity = case_when(
+    Ethnicity == "Hispanic or Latino" ~ "Hispanic",
+    Ethnicity == "Not Hispanic or Latino" ~ "Non-Hispanic",
+    TRUE ~ NA_character_
+  )) %>%
+  mutate(RaceEthnicity = case_when(
+    Ethnicity == "Hispanic" ~ "Hispanic",
+    TRUE ~ paste(Ethnicity,Race)
+    )) %>%
+  # Extract the maxAge in the original ageGroup column
+  mutate(maxAge = as.numeric(str_extract(ageGroup, "[0-9]{1,2} "))) %>%
+  # reclassify ageGroup based on the maxAge xolumn 
+  mutate(newAgeGroup = case_when(
+    maxAge <= 14 ~ "0-14 Years",
+    maxAge <= 29 ~ "15-29 Years",
+    maxAge <= 49 ~ "30-49 Years",
+    maxAge <= 64 ~ "50-64 Years",
+    maxAge >= 65 ~ "65+",
+  )) %>%
+  dplyr::filter(Ethnicity == "Hispanic" | RaceEthnicity %in% targetRaceEthnicity) %>%
+  dplyr::filter(!is.na(newAgeGroup))
+  
+  
+pop_race_age = cdc_pop %>%
+  filter(States == "Wisconsin") %>%
+  group_by(States, newAgeGroup, RaceEthnicity) %>%
+  summarise(subPop = sum(Population)) %>%
+  ungroup() %>%
+  add_count(RaceEthnicity, wt = subPop, name = "popByRace") %>%
+  mutate(w_i = subPop/popByRace) %>%
+  arrange(RaceEthnicity)
+
+pop_race_age
+
+```
+
+```{r}
+death_race_age_quarter %>%
+  left_join(pop_race_age, by = c("AgeGroup" = "newAgeGroup", "RaceEthnicity" = "RaceEthnicity")) %>%
+  arrange(RaceEthnicity, YearQuarter) %>%
+  mutate(r_i = covidDeath / subPop,
+         w_r = w_i * r_i * 100000) %>%
+  group_by(RaceEthnicity, YearQuarter) %>%
+  mutate(r_adj = sum(w_r)) %>%
+  group_by(RaceEthnicity, YearQuarter) %>%
+  summarise(mean(r_adj))
+  
+  
 ```
 
