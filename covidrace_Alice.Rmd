@@ -1,0 +1,80 @@
+---
+title: "covidrace"
+author: "Siyu Liang"
+date: "5/26/2021"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_knit$set(root.dir = "/Users/liangsiyu/Adeline Research Dropbox/Liang Siyu/COVID19-policies")
+getwd()
+```
+
+
+```{r readfile}
+library(tidyverse)
+cdc_pop = read.delim(file="/Users/liangsiyu/Adeline Research Dropbox/Liang Siyu/COVID19-policies/Data/cdc_pop_counts_race_state_age/Single-Race Population Estimates 2010-2019 by State and Single-Year Age (21).txt")       
+
+ 
+excess_death <- read.csv("/Users/liangsiyu/Adeline Research Dropbox/Liang Siyu/COVID19-policies/Data/CDC-deathsbyrace/AH_Quarterly_Excess_Deaths_by_State__Sex__Age__and_Race.csv") 
+
+cdc_pop_new <- cdc_pop %>%
+  select(States,Five.Year.Age.Groups.Code,Ethnicity,Race,Population) %>%
+  rename(Age = Five.Year.Age.Groups.Code) %>%
+  filter(Ethnicity == "Not Hispanic or Latino" & Race == "Black or African American" |
+         Ethnicity == "Not Hispanic or Latino" & Race == "White" | 
+        Ethnicity == "Hispanic or Latino" )%>%
+  mutate_at(c("Age"), funs(recode(., `1`="0-14 Years", `1-4`= "0-14 Years",`5-9`= "0-14 Years", `10-14`= 
+                                    "0-14 Years",
+                                  `15-19`= "15-29 Years",`20-24`= "15-29 Years",`25-29`= "15-29 Years",
+                                  `30-34`= "30-49 Years",`35-39`= "30-49 Years",`40-44`= "30-49 Years",`45-49`= "30-49 Years",
+                                  `50-54`= "50-64 Years",`55-59`= "50-64 Years",`60-64`= "50-64 Years",
+                                  `65-69`= "65+",`70-74`= "65+",`75-79`= "65+",`80-84`= "65+",`85+`= "65+"
+                                  ))) %>%
+  group_by(States, Age, Ethnicity,Race) %>% summarise(sumpop = sum(Population))
+
+excess_death_new <- excess_death %>%
+  rename(Age = AgeGroup,
+         Race = RaceEthnicity,
+         States = StateName) %>%
+  filter(Age == "0-14 Years" | Age == "15-29 Years" | Age == "30-49 Years" | Age == "50-64 Years" | Age == "65+",
+         Race == "Hispanic" | Race == "Non-Hispanic Black" | Race == "Non-Hispanic White",
+         YearQuarter == "2020, Quarter 1" | YearQuarter == "2020, Quarter 2" | YearQuarter == "2020, Quarter 3" | YearQuarter == "2020, Quarter 4" | YearQuarter == "2021, Quarter 1",
+         Sex == "All Sexes") %>%
+  select(-State) 
+
+``` 
+
+```{r}
+Wisconsin_excessdeath <- excess_death_new  %>%
+  filter(States == "Wisconsin")  %>%
+  select(States,Race,Age,Year,Quarter,COVID19..weighted.) 
+
+Wisconsin_excessdeath$Race <- as.character(Wisconsin_excessdeath$Race)
+Wisconsin_excessdeath$Race[Wisconsin_excessdeath$Race ==  "Non-Hispanic White"] <- "White"
+Wisconsin_excessdeath$Race[Wisconsin_excessdeath$Race ==  "Non-Hispanic Black"] <- "Black"
+
+Wisconisin_pop <- cdc_pop_new %>%
+  filter(States == "Wisconsin")
+
+Wisconisin_pop$Ethnicity <- as.character(Wisconisin_pop$Ethnicity)
+Wisconisin_pop$Race <- as.character(Wisconisin_pop$Race)
+Wisconisin_pop$Race[Wisconisin_pop$Ethnicity ==  "Hispanic or Latino"] <- "Hispanic"
+Wisconisin_pop$Race[Wisconisin_pop$Race ==  "Black or African American"] <- "Black"
+
+Wisconisin_pop_all <- Wisconisin_pop %>%
+  group_by(States,Age,Ethnicity,Race) %>%
+  summarise(sumpop = sum(sumpop))  %>%
+  group_by(Age) %>%
+  mutate(sumage = sum(sumpop)) #population i 
+
+Wisconisin_pop_all$wi <- Wisconisin_pop_all$sumage/sum(Wisconisin_pop_all$sumpop) #wi
+
+WI_data <- right_join(Wisconsin_excessdeath,Wisconisin_pop_all)
+WI_data$ri <- WI_data$COVID19..weighted./WI_data$sumpop # ri
+WI_data$Rgt <- WI_data$ri*WI_data$wi*100000
+
+WI_data
+```

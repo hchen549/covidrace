@@ -1,0 +1,58 @@
+---
+title: "Untitled"
+output: pdf_document
+---
+
+```{r}
+library(rjson)
+library(jsonlite)
+library(lubridate)
+library("purrr")
+library(tidyverse)
+```
+
+```{r}
+json_data <- jsonlite::fromJSON("./data/raw_response (1).json", flatten = TRUE)
+json_data$trendline[[1]]
+
+complete_satis = map(json_data$trendline, 1) 
+mostly_satis = map(json_data$trendline, 2) 
+not_satis_at_all = map(json_data$trendline, 3) 
+not_very_satisfy= map(json_data$trendline, 4) 
+unsure = map(json_data$trendline, 5) 
+
+unsure
+
+str(json_data$trendline)
+
+df = as.data.frame(json_data$trendline)
+df
+```
+
+
+```{r}
+df = as.data.frame(do.call(rbind, json_data$trendline))
+df_decoded = data.frame(matrix(NA, nrow = nrow(df), ncol = ncol(df)))
+
+
+
+df = df %>%
+  rownames_to_column("date") %>%
+  mutate(date =as.Date(as.POSIXct(as.numeric(as.character(date))/1000, origin="1970-01-01", tz="GMT"))) %>%
+  mutate(date = format(as.Date(date), "%Y-%m"))
+
+for (i in 1:nrow(df)){
+  for (j in 1:ncol(df)){
+    df_decoded[i, j] = unname(sapply(df[i,j], function(x) x[1]))
+    
+  }
+}
+
+colnames(df_decoded) = colnames(df)
+
+df_decoded
+df_decoded %>%
+  group_by(date) %>%
+  summarise(mean(`Completely satisfied`), mean(`Mostly satisfied`), mean(`Not satisfied at all`), mean(`Not very satisfied`), mean(Unsure))
+```
+

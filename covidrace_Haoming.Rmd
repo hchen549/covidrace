@@ -1,0 +1,14 @@
+---
+title: "covidrace_Haoming"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(tidytext)
+```
+
+```{r}
+read_csv("https://www.dropbox.com/home/COVID19-policies/Data/CDC-deathsbyrace?preview=AH_Quarterly_Excess_Deaths_by_State__Sex__Age__and_Race.csv")
+```
+

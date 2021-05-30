@@ -1,0 +1,14 @@
+---
+title: "covid_racial_inequality"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+```
+
+```{r}
+read_csv("./data/AH_Quarterly_Excess_Deaths_by_State__Sex__Age__and_Race.csv")
+read_csv("./data/Single-Race Population Estimates 2010-2019 by State and Single-Year Age (21).txt")
+```
+
